@@ -39,7 +39,6 @@
 #include <EEPROM.h>
 
 #include "strings.h"
-#include "avrio.h"
 #include "pins.h"
 
 #define BUZZ_PIN 6
