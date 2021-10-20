@@ -50,6 +50,8 @@ https://playground.arduino.cc/Code/PIDLibrary/
 The Ziegler-Nichols relay tuning library
 https://github.com/jackw01/arduino-pid-autotuner
 
+Auto tuner works only in single analog PWM mode, not in SSR or Dual PWM modes.
+
 The dual PWM 16 use 2 PWM 8 bit outputs
 http://www.openmusiclabs.com/learning/digital/pwm-dac/dual-pwm-circuits/index.html
 

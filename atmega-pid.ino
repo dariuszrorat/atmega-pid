@@ -26,7 +26,7 @@
       32*XX*YY#      set too low input value LED pin XX to XX SP percent
       33*XX#         set SSR mode relay enable information LED pin
       34*XX#         set tuner target input value 0..1023, default 511
-      35*XX#         set tuner output range, 0..255 or 0..65535 for dual PWM, default 255
+      35*XX#         set tuner output range, 0..255, default 255
       36*X#          set tuning mode, 0 = basic, 1 = less overshoot, 2 = no overshoot, default 0
       37*XX#         set tuning cycles, default 10
       41*#           enable PID regulator
@@ -191,7 +191,7 @@ void setup()
   pid.SetMode(AUTOMATIC);
 
   tuner.setTargetInputValue(targetInputValue);
-  tuner.setLoopInterval(settings.sampleTime*1000);
+  tuner.setLoopInterval(settings.sampleTime * 1000);
   tuner.setOutputRange(0, 255);
   tuner.setZNMode(PIDAutotuner::ZNModeBasicPID);
 
@@ -219,103 +219,14 @@ void loop()
   if (pidEnabled == 1)
   {
     pid.Compute();
-
-    switch (settings.pidMode)
-    {
-      case 0:
-        {
-          analogWrite(settings.pinOutput, Output);
-        }
-        break;
-      case 1:
-        {
-          if (millis() - windowStartTime > settings.windowSize)
-          { //time to shift the Relay Window
-            windowStartTime += settings.windowSize;
-          }
-          if (Output < millis() - windowStartTime)
-          {
-            digitalWrite(settings.pinOutput, (1 - settings.relayHigh));
-            if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, LOW);
-          }
-          else
-          {
-            digitalWrite(settings.pinOutput, settings.relayHigh);
-            if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, HIGH);
-          }
-        }
-        break;
-      case 2:
-        {
-          int outInt = (int) Output;
-          int outH = (outInt >> 8) & 0xFF;
-          int outL = outInt & 0xFF;
-          analogWrite(settings.pinOutputPWM16H, outH);
-          analogWrite(settings.pinOutputPWM16L, outL);
-        }
-        break;
-    }
-
-    if (settings.pinClip != DISABLED_LED_PIN)
-    {
-      double percent = (double) settings.percentClip;
-      if ((Setpoint > 0) && ((100.0 * Input / Setpoint) > percent))
-      {
-        digitalWrite(settings.pinClip, HIGH);
-      }
-      else
-      {
-        digitalWrite(settings.pinClip, LOW);
-      }
-    }
-
-    if (settings.pinTooLow != DISABLED_LED_PIN)
-    {
-      double percent = (double) settings.percentTooLow;
-      if ((Setpoint > 0) && ((100.0 * Input / Setpoint) < percent))
-      {
-        digitalWrite(settings.pinTooLow, HIGH);
-      }
-      else
-      {
-        digitalWrite(settings.pinTooLow, LOW);
-      }
-    }
-
+    doOutput();
+    doWarningLEDS();
   }
 
   //auto tuner
   if ((tunerRunning == 1) && (pidEnabled == 0))
   {
-    
-    loopInterval = settings.sampleTime;
-    unsigned long milliseconds = millis();
-    char key = keypad.getKey();
-
-    tuner.startTuningLoop(micros());
-    
-    while (!tuner.isFinished() && !key)
-    {      
-      unsigned long microseconds = micros();
-      milliseconds = millis();
-      Input = analogRead(settings.pinInput);
-      Output = tuner.tunePID(Input, microseconds);
-      while (millis() - milliseconds < loopInterval) delay(1);
-      key = keypad.getKey();
-    }
-
-    Kp = tuner.getKp();
-    Ki = tuner.getKi();
-    Kd = tuner.getKd();
-    settings.Kp = Kp;
-    settings.Ki = Ki;
-    settings.Kd = Kd;
-    pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-    tunerRunning = 0;
-    
-    displayTitle = "PID TUNING";
-    displayStr = "FINISHED";
-    displayInput = 1;
+    doTuning();
   }
 
   ledUpdate();
@@ -606,7 +517,7 @@ void execMMI(String cmd, String params)
         int value = limitValue(svalue0.toInt(), 50, 32767);
         settings.sampleTime = value;
         pid.SetSampleTime(settings.sampleTime);
-        tuner.setLoopInterval(settings.sampleTime*1000);
+        tuner.setLoopInterval(settings.sampleTime * 1000);
       }
       break;
 
@@ -1033,7 +944,112 @@ void restoreSettings()
   pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
   pid.SetControllerDirection(settings.controllerDirection);
   pid.SetSampleTime(settings.sampleTime);
-  tuner.setLoopInterval(settings.sampleTime*1000);
+  tuner.setLoopInterval(settings.sampleTime * 1000);
+
+}
+
+void doOutput()
+{
+  switch (settings.pidMode)
+  {
+    case 0:
+      {
+        analogWrite(settings.pinOutput, Output);
+      }
+      break;
+    case 1:
+      {
+        if (millis() - windowStartTime > settings.windowSize)
+        { //time to shift the Relay Window
+          windowStartTime += settings.windowSize;
+        }
+        if (Output < millis() - windowStartTime)
+        {
+          digitalWrite(settings.pinOutput, (1 - settings.relayHigh));
+          if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, LOW);
+        }
+        else
+        {
+          digitalWrite(settings.pinOutput, settings.relayHigh);
+          if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, HIGH);
+        }
+      }
+      break;
+    case 2:
+      {
+        int outInt = (int) Output;
+        int outH = (outInt >> 8) & 0xFF;
+        int outL = outInt & 0xFF;
+        analogWrite(settings.pinOutputPWM16H, outH);
+        analogWrite(settings.pinOutputPWM16L, outL);
+      }
+      break;
+  }
+
+}
+
+void doWarningLEDS()
+{
+  if (settings.pinClip != DISABLED_LED_PIN)
+  {
+    double percent = (double) settings.percentClip;
+    if ((Setpoint > 0) && ((100.0 * Input / Setpoint) > percent))
+    {
+      digitalWrite(settings.pinClip, HIGH);
+    }
+    else
+    {
+      digitalWrite(settings.pinClip, LOW);
+    }
+  }
+
+  if (settings.pinTooLow != DISABLED_LED_PIN)
+  {
+    double percent = (double) settings.percentTooLow;
+    if ((Setpoint > 0) && ((100.0 * Input / Setpoint) < percent))
+    {
+      digitalWrite(settings.pinTooLow, HIGH);
+    }
+    else
+    {
+      digitalWrite(settings.pinTooLow, LOW);
+    }
+  }
+}
+
+void doTuning()
+{
+  loopInterval = settings.sampleTime;
+  unsigned long milliseconds = millis();
+  char key = keypad.getKey();
+
+  tuner.startTuningLoop(micros());
+
+  while (!tuner.isFinished() && !key)
+  {
+    unsigned long microseconds = micros();
+    milliseconds = millis();
+    Input = analogRead(settings.pinInput);
+    Output = tuner.tunePID(Input, microseconds);
+    analogWrite(settings.pinOutput, Output);
+    while (millis() - milliseconds < loopInterval) delay(1);
+    key = keypad.getKey();
+  }
+
+  analogWrite(settings.pinOutput, 0);
+
+  Kp = tuner.getKp();
+  Ki = tuner.getKi();
+  Kd = tuner.getKd();
+  settings.Kp = Kp;
+  settings.Ki = Ki;
+  settings.Kd = Kd;
+  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+  tunerRunning = 0;
+
+  displayTitle = "PID TUNING";
+  displayStr = "FINISHED";
+  displayInput = 1;
 
 }
 
