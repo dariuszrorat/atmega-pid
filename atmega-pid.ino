@@ -435,11 +435,26 @@ void execMMI(String cmd, String params)
       break;
     case 01:
       {
-        const char* modes[4] = {"PWM", "PWM16", "DUALPWM", "SSR"};
-        String s = String(modes[settings.pidMode]);
-        displayTitle = "P=" + String(settings.Kp) + " I=" + String(settings.Ki);
-        displayStr = "D=" + String(settings.Kd) + " " + s;
-        displayInput = 1;
+        if ((pidEnabled == 0) && (tunerRunning == 0))
+        {
+          const char* modes[4] = {"PWM", "PWM 16", "DUAL PWM", "SSR"};
+          String s = String(modes[settings.pidMode]);
+          printFilledStr("SETTINGS", 0);
+          printFilledStr("KP=" + String(settings.Kp), 1);
+          delay(2000);
+          printFilledStr("KI=" + String(settings.Ki), 1);
+          delay(2000);
+          printFilledStr("KD=" + String(settings.Kd), 1);
+          delay(2000);
+          printFilledStr("MODE: " + s, 1);
+          delay(2000);
+        }
+        else
+        {
+          displayTitle = "ERROR";
+          displayStr = "PID IS ACTIVE";
+          displayInput = 1;
+        }
       }
       break;
 
@@ -894,7 +909,7 @@ void restoreSettings()
     case 1:
     case 2: pid.SetOutputLimits(0, 65535);
       break;
-    case3:
+case3:
       pid.SetOutputLimits(0, settings.windowSize);
       break;
   }
