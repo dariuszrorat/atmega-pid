@@ -181,7 +181,11 @@ void setup()
   pinMode(settings.pinInput, INPUT);
   pinMode(settings.pinSetpoint, INPUT);
   pinMode(settings.pinOutput, OUTPUT);
+  pinMode(settings.pinOutputPWM16H, OUTPUT);
+  pinMode(settings.pinOutputPWM16L, OUTPUT);
   digitalWrite(settings.pinOutput, LOW);
+  digitalWrite(settings.pinOutputPWM16H, LOW);
+  digitalWrite(settings.pinOutputPWM16L, LOW);
 
   Input = analogRead(settings.pinInput);
   Setpoint = 0;
@@ -787,8 +791,13 @@ void execMMI(String cmd, String params)
 
 void disableAllOutputs()
 {
-  int valoff = (settings.pidMode == 0) ? 0 : (1 - settings.relayHigh);
+  int valoff = (settings.pidMode == 3) ? (1 - settings.relayHigh) : 0;
   digitalWrite(settings.pinOutput, valoff);
+  if (settings.pidMode == 2)
+  {
+    digitalWrite(settings.pinOutputPWM16H, LOW);
+    digitalWrite(settings.pinOutputPWM16L, LOW);
+  }
   if (settings.pinClip != DISABLED_LED_PIN)
     digitalWrite(settings.pinClip, LOW);
   if (settings.pinTooLow != DISABLED_LED_PIN)
@@ -1006,9 +1015,9 @@ void doOutput()
       break;
     case 2:
       {
-        int outInt = (int) Output;
-        int outH = (outInt >> 8) & 0xFF;
-        int outL = outInt & 0xFF;
+        unsigned int outInt = (unsigned int) Output;
+        unsigned int outH = (outInt >> 8) & 0xFF;
+        unsigned int outL = outInt & 0xFF;
         analogWrite(settings.pinOutputPWM16H, outH);
         analogWrite(settings.pinOutputPWM16L, outL);
       }
