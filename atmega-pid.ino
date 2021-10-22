@@ -445,21 +445,21 @@ void execMMI(String cmd, String params)
 
     case 10:
       {
-        int value = limitValue(svalue0.toInt(), 0, 32767);
+        long value = limitValue(svalue0.toInt(), 0, 2147483647);
         settings.Kp = (double) value / 100.0;
         pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
       }
       break;
     case 11:
       {
-        int value = limitValue(svalue0.toInt(), 0, 32767);
+        long value = limitValue(svalue0.toInt(), 0, 2147483647);
         settings.Ki = (double) value / 100.0;
         pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
       }
       break;
     case 12:
       {
-        int value = limitValue(svalue0.toInt(), 0, 32767);
+        long value = limitValue(svalue0.toInt(), 0, 2147483647);
         settings.Kd = (double) value / 100.0;
         pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
       }
@@ -1100,12 +1100,12 @@ void printFilledStr(String s, int row)
   lcd.print(filledStr(s, 16));
 }
 
-int limitValue(int value, int lo, int hi)
+long limitValue(long value, long lo, long hi)
 {
   return (value > hi) ? hi : ((value < lo) ? lo : value);
 }
 
-unsigned int limitUintValue(unsigned value, unsigned int lo, unsigned int hi)
+unsigned long limitUintValue(unsigned long value, unsigned long lo, unsigned long hi)
 {
   return (value > hi) ? hi : ((value < lo) ? lo : value);
 }
