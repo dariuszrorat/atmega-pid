@@ -14,7 +14,7 @@
       15*X#          set PID mode 0 = PWM, 1 = PWM16, 2 = Dual PWM, 3 = SSR
       16*X#          set relay high state X = 0 or 1
       17*XXXX#       set relay mode window size ms
-      18*XXXX#       set PID sample time ms or tuner interval
+      18*XXXX#       set PID sample time ms
       20*XX#         set input analog pin
       21*XX#         set setpoint analog pin
       22*XX#         set output digital relay or PWM pin
@@ -25,13 +25,8 @@
       31*XX*YY#      set the clip alarm LED pin XX to XX SP percent
       32*XX*YY#      set too low input value LED pin XX to XX SP percent
       33*XX#         set SSR mode relay enable information LED pin
-      34*XX#         set tuner target input value 0..1023, default 511
-      35*XX#         set tuner output range, 0..255, default 255
-      36*X#          set tuning mode, 0 = basic, 1 = less overshoot, 2 = no overshoot, default 0
-      37*XX#         set tuning cycles, default 10
       41*#           enable PID regulator
       42*#           disable PID regulator
-      43*#           start auto tuner, press any key to abort
       51*#           save settings to EEPROM
       52*#           load settings from EEPROM
 
@@ -42,13 +37,12 @@
 #include <Keypad.h>
 #include <PID_v1.h>
 #include <EEPROM.h>
-#include <pidautotuner.h>
 
 #include "strings.h"
 #include "pins.h"
 
 #define BUZZ_PIN 6
-#define NUM_COMMANDS 30
+#define NUM_COMMANDS 25
 #define DISPLAY_TIME 3 // 3x2s
 #define IDLE_TIME 75 // 1,25*60s
 #define DEFAULT_INPUT_PIN 14
@@ -98,13 +92,8 @@ const char* MMI_COMMANDS[NUM_COMMANDS]
   "*31*",
   "*32*",
   "*33*",
-  "*34*",
-  "*35*",
-  "*36*",
-  "*37*",
   "*41*",
   "*42*",
-  "*43*",
   "*51*",
   "*52*"
 };
@@ -118,7 +107,7 @@ byte lock = 0;
 byte blnk = 0;
 byte idle = 0;
 byte entering = 0;
-byte displayInput = 0;
+byte displayInfo = 0;
 byte invalidMMI = 0;
 byte invalidPin = 0;
 byte dispCounter = 0;
@@ -128,13 +117,6 @@ unsigned int counter = 0;
 byte pidEnabled = 0;
 unsigned long windowStartTime;
 int setpointValue = 0;
-
-byte tunerRunning = 0;
-int targetInputValue = 511;
-unsigned int outputRange = 255;
-PIDAutotuner::ZNMode znMode = PIDAutotuner::ZNModeBasicPID;
-long loopInterval;
-int tuningCycles = 10;
 
 double Setpoint = 0, Input = 0, Output = 0;
 double Kp = DEFAULT_P, Ki = DEFAULT_I, Kd = DEFAULT_D;
@@ -166,7 +148,6 @@ struct Settings
 Settings settings;
 
 PID pid(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
-PIDAutotuner tuner = PIDAutotuner();
 
 String MMI = "";
 String lastMMI = "";
@@ -194,11 +175,6 @@ void setup()
   pid.SetSampleTime(settings.sampleTime);
   pid.SetMode(AUTOMATIC);
 
-  tuner.setTargetInputValue(targetInputValue);
-  tuner.setLoopInterval(settings.sampleTime * 1000);
-  tuner.setOutputRange(0, 255);
-  tuner.setZNMode(PIDAutotuner::ZNModeBasicPID);
-
   windowStartTime = millis();
 
   lcd.init();
@@ -225,12 +201,6 @@ void loop()
     pid.Compute();
     doOutput();
     doWarningLEDS();
-  }
-
-  //auto tuner
-  if ((tunerRunning == 1) && (pidEnabled == 0))
-  {
-    doTuning();
   }
 
   ledUpdate();
@@ -261,7 +231,7 @@ void settingsUpdate()
 
     entering = 1;
     invalidPin = 0;
-    displayInput = 0;
+    displayInfo = 0;
     idleCounter = 0;
 
     switch (key)
@@ -363,14 +333,14 @@ void ledUpdate()
     return;
   }
 
-  if (displayInput == 1)
+  if (displayInfo == 1)
   {
     printFilledStr(displayTitle, 0);
     printFilledStr(displayStr, 1);
     dispCounter += 1;
     if (dispCounter >= (DISPLAY_TIME * 2))
     {
-      displayInput = 0;
+      displayInfo = 0;
       dispCounter = 0;
     }
     return;
@@ -439,7 +409,7 @@ void execMMI(String cmd, String params)
       break;
     case 01:
       {
-        if ((pidEnabled == 0) && (tunerRunning == 0))
+        if (pidEnabled == 0)
         {
           const char* modes[4] = {"PWM", "PWM 16", "DUAL PWM", "SSR"};
           String s = String(modes[settings.pidMode]);
@@ -457,7 +427,7 @@ void execMMI(String cmd, String params)
         {
           displayTitle = "ERROR";
           displayStr = "PID IS ACTIVE";
-          displayInput = 1;
+          displayInfo = 1;
         }
       }
       break;
@@ -540,7 +510,6 @@ void execMMI(String cmd, String params)
         int value = limitValue(svalue0.toInt(), 50, 32767);
         settings.sampleTime = value;
         pid.SetSampleTime(settings.sampleTime);
-        tuner.setLoopInterval(settings.sampleTime * 1000);
       }
       break;
 
@@ -697,41 +666,13 @@ void execMMI(String cmd, String params)
         }
       }
       break;
-    case 34:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 1023);
-        targetInputValue = value;
-        tuner.setTargetInputValue(targetInputValue);
-      }
-      break;
-    case 35:
-      {
-        unsigned int value = limitUintValue(svalue0.toInt(), 0, 65535);
-        outputRange = value;
-        tuner.setOutputRange(0, outputRange);
-      }
-      break;
-    case 36:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 2);
-        znMode = (PIDAutotuner::ZNMode) value;
-        tuner.setZNMode(znMode);
-      }
-      break;
-    case 37:
-      {
-        int value = limitValue(svalue0.toInt(), 3, 255);
-        tuningCycles = value;
-        tuner.setTuningCycles(value);
-      }
-      break;
 
     case 41:
       {
         pidEnabled = 1;
         displayTitle = "INFO";
         displayStr = "PID ENABLED";
-        displayInput = 1;
+        displayInfo = 1;
       }
       break;
     case 42:
@@ -739,25 +680,9 @@ void execMMI(String cmd, String params)
         pidEnabled = 0;
         displayTitle = "INFO";
         displayStr = "PID DISABLED";
-        displayInput = 1;
+        displayInfo = 1;
         Output = 0;
         disableAllOutputs();
-      }
-      break;
-    case 43:
-      {
-        if (pidEnabled == 0)
-        {
-          tunerRunning = 1;
-          printFilledStr("PID TUNING", 0);
-          printFilledStr("PLEASE WAIT...", 1);
-        }
-        else
-        {
-          displayTitle = "ERROR";
-          displayStr = "PID IS ENABLED";
-          displayInput = 1;
-        }
       }
       break;
 
@@ -766,7 +691,7 @@ void execMMI(String cmd, String params)
         EEPROM.put(0, settings);
         displayTitle = "SAVE SETTINGS";
         displayStr = "OK";
-        displayInput = 1;
+        displayInfo = 1;
       }
       break;
     case 52:
@@ -783,7 +708,7 @@ void execMMI(String cmd, String params)
           displayTitle = "ERROR";
           displayStr = "PID IS ENABLED";
         }
-        displayInput = 1;
+        displayInfo = 1;
       }
       break;
   }
@@ -995,7 +920,6 @@ case3:
   pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
   pid.SetControllerDirection(settings.controllerDirection);
   pid.SetSampleTime(settings.sampleTime);
-  tuner.setLoopInterval(settings.sampleTime * 1000);
 
 }
 
@@ -1071,51 +995,6 @@ void doWarningLEDS()
       digitalWrite(settings.pinTooLow, LOW);
     }
   }
-}
-
-void doTuning()
-{
-  loopInterval = settings.sampleTime;
-  unsigned long milliseconds = millis();
-  char key = keypad.getKey();
-
-  tuner.startTuningLoop(micros());
-
-  while (!tuner.isFinished() && !key)
-  {
-    unsigned long microseconds = micros();
-    milliseconds = millis();
-    Input = analogRead(settings.pinInput);
-    Output = tuner.tunePID(Input, microseconds);
-    switch (settings.pidMode)
-    {
-      case 0: analogWrite(settings.pinOutput, Output); break;
-      case 1: analogWrite16(settings.pinOutput, Output); break;
-    }
-
-    while (millis() - milliseconds < loopInterval) delay(1);
-    key = keypad.getKey();
-  }
-
-  switch (settings.pidMode)
-  {
-    case 0: analogWrite(settings.pinOutput, 0); break;
-    case 1: analogWrite16(settings.pinOutput, 0); break;
-  }
-
-  Kp = tuner.getKp();
-  Ki = tuner.getKi();
-  Kd = tuner.getKd();
-  settings.Kp = Kp;
-  settings.Ki = Ki;
-  settings.Kd = Kd;
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-  tunerRunning = 0;
-
-  displayTitle = "PID TUNING";
-  displayStr = "FINISHED";
-  displayInput = 1;
-
 }
 
 void printFilledStr(String s, int row)
