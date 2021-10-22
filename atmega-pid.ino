@@ -11,7 +11,7 @@
       12*XXXX#       set D param value divided by 100
       13*X#          set proportional on measurement X=0 or error X=1
       14*X#          set direction X=0 means direct, X=1 means reverse
-      15*X#          set PID mode 0 = PWM, 1 = SSR, 2 = 16 bit PWM
+      15*X#          set PID mode 0 = PWM, 1 = PWM16, 2 = Dual PWM, 3 = SSR
       16*X#          set relay high state X = 0 or 1
       17*XXXX#       set relay mode window size ms
       18*XXXX#       set PID sample time ms or tuner interval
@@ -53,9 +53,9 @@
 #define IDLE_TIME 75 // 1,25*60s
 #define DEFAULT_INPUT_PIN 14
 #define DEFAULT_SETPOINT_PIN 15
-#define DEFAULT_OUTPUT_PIN_PWM16_H 3
-#define DEFAULT_OUTPUT_PIN_PWM16_L 5
-#define DEFAULT_OUTPUT_PIN 3
+#define DEFAULT_OUTPUT_PIN_PWM16_H 9
+#define DEFAULT_OUTPUT_PIN_PWM16_L 10
+#define DEFAULT_OUTPUT_PIN 9
 #define DEFAULT_WINDOW_SIZE 5000
 #define DEFAULT_SAMPLE_TIME 100
 #define DISABLED_LED_PIN 255
@@ -109,8 +109,8 @@ const char* MMI_COMMANDS[NUM_COMMANDS]
   "*52*"
 };
 
-byte rowPins[ROWS] = {0, 1, 2, 4};
-byte colPins[COLS] = {13, 12, 11, 10};
+byte rowPins[ROWS] = {13, 12, 11, 8};
+byte colPins[COLS] = {7, 5, 4, 3};
 
 Keypad keypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
@@ -435,7 +435,7 @@ void execMMI(String cmd, String params)
       break;
     case 01:
       {
-        const char* modes[3] = {"PWM", "SSR", "PWM16"};
+        const char* modes[4] = {"PWM", "PWM16", "DUALPWM", "SSR"};
         String s = String(modes[settings.pidMode]);
         displayTitle = "P=" + String(settings.Kp) + " I=" + String(settings.Ki);
         displayStr = "D=" + String(settings.Kd) + " " + s;
@@ -480,13 +480,17 @@ void execMMI(String cmd, String params)
       break;
     case 15:
       {
-        int value = limitValue(svalue0.toInt(), 0, 2);
+        int value = limitValue(svalue0.toInt(), 0, 3);
         settings.pidMode = value;
         switch (settings.pidMode)
         {
           case 0: pid.SetOutputLimits(0, 255); break;
-          case 1: pid.SetOutputLimits(0, settings.windowSize); break;
+          case 1: {
+              pid.SetOutputLimits(0, 65535);
+              setupPWM16();
+            } break;
           case 2: pid.SetOutputLimits(0, 65535); break;
+          case 3: pid.SetOutputLimits(0, settings.windowSize); break;
         }
 
         windowStartTime = millis();
@@ -547,14 +551,23 @@ void execMMI(String cmd, String params)
     case 22:
       {
         int pin = svalue0.toInt();
-        if (settings.pidMode == 0)
+        switch (settings.pidMode)
         {
-          invalidPin = checkPWMPin(pin) ? 0 : 1;
+          case 0: {
+              invalidPin = checkPWMPin(pin) ? 0 : 1;
+            } break;
+          case 1: {
+              invalidPin = checkPWMPin(pin) ? 0 : 1;
+              setupPWM16();
+            } break;
+          case 2: {
+              invalidPin = checkPWMPin(pin) ? 0 : 1;
+            } break;
+          case 3: {
+              invalidPin = checkDigitalPin(pin) ? 0 : 1;
+            } break;
         }
-        else
-        {
-          invalidPin = checkDigitalPin(pin) ? 0 : 1;
-        }
+
         if (invalidPin == 0)
         {
           settings.pinOutput = pin;
@@ -819,11 +832,12 @@ void restoreSettings()
       break;
     case 1:
       {
-        if (!checkDigitalPin(settings.pinOutput))
+        if (!checkPWMPin(settings.pinOutput))
         {
           settings.pinOutput = DEFAULT_OUTPUT_PIN;
         }
         pinMode(settings.pinOutput, OUTPUT);
+        setupPWM16();
       }
       break;
     case 2:
@@ -838,6 +852,15 @@ void restoreSettings()
           settings.pinOutputPWM16L = DEFAULT_OUTPUT_PIN_PWM16_L;
         }
         pinMode(settings.pinOutputPWM16L, OUTPUT);
+      }
+      break;
+    case 3:
+      {
+        if (!checkDigitalPin(settings.pinOutput))
+        {
+          settings.pinOutput = DEFAULT_OUTPUT_PIN;
+        }
+        pinMode(settings.pinOutput, OUTPUT);
       }
       break;
   }
@@ -863,13 +886,17 @@ void restoreSettings()
     settings.sampleTime = DEFAULT_SAMPLE_TIME;
   }
 
-  if (settings.pidMode == 0)
+  switch (settings.pidMode)
   {
-    pid.SetOutputLimits(0, 255);
-  }
-  else
-  {
-    pid.SetOutputLimits(0, settings.windowSize);
+    case 0:
+      pid.SetOutputLimits(0, 255);
+      break;
+    case 1:
+    case 2: pid.SetOutputLimits(0, 65535);
+      break;
+    case3:
+      pid.SetOutputLimits(0, settings.windowSize);
+      break;
   }
 
   if (settings.relayHigh > 1)
@@ -959,6 +986,20 @@ void doOutput()
       break;
     case 1:
       {
+        analogWrite16(settings.pinOutput, Output);
+      }
+      break;
+    case 2:
+      {
+        int outInt = (int) Output;
+        int outH = (outInt >> 8) & 0xFF;
+        int outL = outInt & 0xFF;
+        analogWrite(settings.pinOutputPWM16H, outH);
+        analogWrite(settings.pinOutputPWM16L, outL);
+      }
+      break;
+    case 3:
+      {
         if (millis() - windowStartTime > settings.windowSize)
         { //time to shift the Relay Window
           windowStartTime += settings.windowSize;
@@ -973,15 +1014,6 @@ void doOutput()
           digitalWrite(settings.pinOutput, settings.relayHigh);
           if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, HIGH);
         }
-      }
-      break;
-    case 2:
-      {
-        int outInt = (int) Output;
-        int outH = (outInt >> 8) & 0xFF;
-        int outL = outInt & 0xFF;
-        analogWrite(settings.pinOutputPWM16H, outH);
-        analogWrite(settings.pinOutputPWM16L, outL);
       }
       break;
   }
@@ -1031,12 +1063,21 @@ void doTuning()
     milliseconds = millis();
     Input = analogRead(settings.pinInput);
     Output = tuner.tunePID(Input, microseconds);
-    analogWrite(settings.pinOutput, Output);
+    switch (settings.pidMode)
+    {
+      case 0: analogWrite(settings.pinOutput, Output); break;
+      case 1: analogWrite16(settings.pinOutput, Output); break;
+    }
+
     while (millis() - milliseconds < loopInterval) delay(1);
     key = keypad.getKey();
   }
 
-  analogWrite(settings.pinOutput, 0);
+  switch (settings.pidMode)
+  {
+    case 0: analogWrite(settings.pinOutput, 0); break;
+    case 1: analogWrite16(settings.pinOutput, 0); break;
+  }
 
   Kp = tuner.getKp();
   Ki = tuner.getKi();
@@ -1067,4 +1108,20 @@ int limitValue(int value, int lo, int hi)
 unsigned int limitUintValue(unsigned value, unsigned int lo, unsigned int hi)
 {
   return (value > hi) ? hi : ((value < lo) ? lo : value);
+}
+
+void setupPWM16()
+{
+  TCCR1A = (TCCR1A & B00111100) | B10000010;
+  TCCR1B = (TCCR1B & B11100000) | B00010001;
+  ICR1 = 0xFFFF;
+}
+
+void analogWrite16(int pin, uint16_t value)
+{
+  switch (pin)
+  {
+    case 9: OCR1A = value; break;
+    case 10: OCR1B = value; break;
+  }
 }

@@ -2,14 +2,14 @@
 
 bool checkDigitalPin(int pin)
 {
-  const int pins[9] = {3, 5, 7, 8, 9, 14, 15, 16, 17};
+  const int pins[9] = {0, 1, 2, 9, 10, 14, 15, 16, 17};
   int i;
   for (i = 0; i < 9; i++)
   {
-      if (pin == pins[i])
-      {
-          return true;
-      }
+    if (pin == pins[i])
+    {
+      return true;
+    }
   }
   return false;
 }
@@ -20,24 +20,24 @@ bool checkAnalogPin(int pin)
   int i;
   for (i = 0; i < 4; i++)
   {
-      if (pin == pins[i])
-      {
-          return true;
-      }
+    if (pin == pins[i])
+    {
+      return true;
+    }
   }
   return false;
 }
 
 bool checkPWMPin(int pin)
 {
-  const int pins[3] = {3, 5, 9};
+  const int pins[2] = {9, 10};
   int i;
-  for (i = 0; i < 3; i++)
+  for (i = 0; i < 2; i++)
   {
-      if (pin == pins[i])
-      {
-          return true;
-      }
+    if (pin == pins[i])
+    {
+      return true;
+    }
   }
   return false;
 }

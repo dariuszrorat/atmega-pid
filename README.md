@@ -6,6 +6,7 @@ This directory contains simple MMI PID regulator for ATMEGA328/Arduino.
 
   - continous mode regulation
   - solid state relay mode regulation
+  - extended 16 bit PWM
   - extended dual PWM 16 bit resolutions
   - Ziegler-Nichols relay method tuning
 
@@ -18,7 +19,7 @@ This directory contains simple MMI PID regulator for ATMEGA328/Arduino.
       *12*XXXX#       set D param value divided by 100
       *13*X#          set proportional on measurement X=0 or error X=1
       *14*X#          set direction X=0 means direct, X=1 means reverse
-      *15*X#          set PID mode 0 = PWM, 1 = SSR, 2 = 16 bit dual PWM
+      *15*X#          set PID mode 0 = PWM, 1 = PWM16, 2 = Dual PWM, 3 = SSR
       *16*X#          set relay high state X = 0 or 1
       *17*XXXX#       set relay mode window size ms
       *18*XXXX#       set PID sample time ms or tuner interval
