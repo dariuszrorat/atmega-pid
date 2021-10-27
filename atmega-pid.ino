@@ -39,7 +39,10 @@
 #include <EEPROM.h>
 
 #include "strings.h"
+#include "limits.h"
 #include "pins.h"
+#include "pwmio.h"
+#include "scheduler.h"
 
 #define BUZZ_PIN 6
 #define NUM_COMMANDS 25
@@ -112,7 +115,6 @@ byte invalidMMI = 0;
 byte invalidPin = 0;
 byte dispCounter = 0;
 byte idleCounter = 0;
-unsigned int counter = 0;
 
 byte pidEnabled = 0;
 unsigned long windowStartTime;
@@ -180,6 +182,11 @@ void setup()
   lcd.init();
   lcd.backlight();
 
+  Sch.init();
+  Sch.add(ledUpdate, 500);
+  Sch.add(keyUpdate, 1);
+  Sch.add(pidUpdate, 1);
+
   printFilledStr("WELCOME TO MMI", 0);
   printFilledStr("PID CONTROLLER", 1);
   delay(2000);
@@ -188,33 +195,10 @@ void setup()
 /* Main Program */
 void loop()
 {
-  if (settings.inputAsSetpoint == 1)
-  {
-    setpointValue = analogRead(settings.pinSetpoint);
-    Setpoint = (double) setpointValue;
-  }
-
-  Input = analogRead(settings.pinInput);
-
-  if (pidEnabled == 1)
-  {
-    pid.Compute();
-    doOutput();
-    doWarningLEDS();
-  }
-
-  ledUpdate();
-  settingsUpdate();
-  delay(1);
-
-  counter += 1;
-  if (counter > 1000)
-  {
-    counter = 0;
-  }
+  Sch.dispatch();
 }
 
-void settingsUpdate()
+void keyUpdate()
 {
 
   char key = keypad.getKey();
@@ -271,11 +255,6 @@ void settingsUpdate()
 
 void ledUpdate()
 {
-  if ((counter % 500) != 0)
-  {
-    return;
-  }
-
   idleCounter += 1;
   if (idleCounter == (2 * IDLE_TIME))
   {
@@ -351,6 +330,24 @@ void ledUpdate()
   printFilledStr(s, 0);
   s = "INPUT   : " + String((int) Input);
   printFilledStr(s, 1);
+}
+
+void pidUpdate()
+{
+  if (settings.inputAsSetpoint == 1)
+  {
+    setpointValue = analogRead(settings.pinSetpoint);
+    Setpoint = (double) setpointValue;
+  }
+
+  Input = analogRead(settings.pinInput);
+
+  if (pidEnabled == 1)
+  {
+    pid.Compute();
+    doOutput();
+    doWarningLEDS();
+  }  
 }
 
 void scanMMI()
@@ -1001,30 +998,4 @@ void printFilledStr(String s, int row)
 {
   lcd.setCursor(0, row);
   lcd.print(filledStr(s, 16));
-}
-
-long limitValue(long value, long lo, long hi)
-{
-  return (value > hi) ? hi : ((value < lo) ? lo : value);
-}
-
-unsigned long limitUintValue(unsigned long value, unsigned long lo, unsigned long hi)
-{
-  return (value > hi) ? hi : ((value < lo) ? lo : value);
-}
-
-void setupPWM16()
-{
-  TCCR1A = (TCCR1A & B00111100) | B10000010;
-  TCCR1B = (TCCR1B & B11100000) | B00010001;
-  ICR1 = 0xFFFF;
-}
-
-void analogWrite16(int pin, uint16_t value)
-{
-  switch (pin)
-  {
-    case 9: OCR1A = value; break;
-    case 10: OCR1B = value; break;
-  }
 }
