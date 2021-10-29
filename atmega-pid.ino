@@ -492,13 +492,15 @@ void execMMI(String cmd, String params)
       {
         int value = limitValue(svalue0.toInt(), 0, 32767);
         settings.windowSize = value;
-        if (settings.pidMode == 0)
+        switch (settings.pidMode)
         {
-          pid.SetOutputLimits(0, 255);
-        }
-        else
-        {
-          pid.SetOutputLimits(0, settings.windowSize);
+          case 0: pid.SetOutputLimits(0, 255); break;
+          case 1: {
+              pid.SetOutputLimits(0, 65535);
+              setupPWM16();
+            } break;
+          case 2: pid.SetOutputLimits(0, 65535); break;
+          case 3: pid.SetOutputLimits(0, settings.windowSize); break;
         }
       }
       break;
@@ -754,7 +756,7 @@ void loadDefaults()
 
 void restoreSettings()
 {
-  if (settings.pidMode > 2)
+  if (settings.pidMode > 3)
   {
     settings.pidMode = 0;
   }
