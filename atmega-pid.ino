@@ -298,14 +298,7 @@ void ledUpdate()
     }
     else
     {
-      if (MMI.length() < 16)
-      {
-        printFilledStr(MMI + '_', 1);
-      }
-      else
-      {
-        printFilledStr(MMI + '_', 1);
-      }
+      printFilledStr(MMI + '_', 1);
     }
     blnk += 1;
     if (blnk == 2) blnk = 0;
