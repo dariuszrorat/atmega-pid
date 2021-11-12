@@ -106,6 +106,28 @@ byte colPins[COLS] = {7, 5, 4, 3};
 
 Keypad keypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
+byte upArrow[] = {
+  B00100,
+  B01110,
+  B10101,
+  B00100,
+  B00100,
+  B00100,
+  B00100,
+  B00100
+};
+
+byte downArrow[] = {
+  B00100,
+  B00100,
+  B00100,
+  B00100,
+  B00100,
+  B10101,
+  B01110,
+  B00100
+};
+
 byte lock = 0;
 byte blnk = 0;
 byte idle = 0;
@@ -122,6 +144,7 @@ int setpointValue = 0;
 
 double Setpoint = 0, Input = 0, Output = 0;
 double Kp = DEFAULT_P, Ki = DEFAULT_I, Kd = DEFAULT_D;
+double LastInput = 0;
 
 struct Settings
 {
@@ -180,6 +203,8 @@ void setup()
   windowStartTime = millis();
 
   lcd.init();
+  lcd.createChar(0, upArrow);
+  lcd.createChar(1, downArrow);
   lcd.backlight();
 
   Sch.init();
@@ -265,64 +290,29 @@ void ledUpdate()
 
   if (invalidMMI == 1)
   {
-    printFilledStr("ERROR", 0);
-    printFilledStr("INVALID CODE", 1);
-    dispCounter += 1;
-    if (dispCounter >= DISPLAY_TIME)
-    {
-      invalidMMI = 0;
-      dispCounter = 0;
-    }
+    printError("ERROR", "INVALID CODE", &invalidMMI);
     return;
   }
 
   if (invalidPin == 1)
   {
-    printFilledStr("ERROR", 0);
-    printFilledStr("INVALID PIN", 1);
-    dispCounter += 1;
-    if (dispCounter >= DISPLAY_TIME)
-    {
-      invalidPin = 0;
-      dispCounter = 0;
-    }
+    printError("ERROR", "INVALID PIN", &invalidPin);
     return;
   }
 
   if (entering == 1)
   {
-    printFilledStr("ENTER MMI CODE", 0);
-    if (blnk == 0)
-    {
-      printFilledStr(MMI, 1);
-    }
-    else
-    {
-      printFilledStr(MMI + '_', 1);
-    }
-    blnk += 1;
-    if (blnk == 2) blnk = 0;
+    printEntering();
     return;
   }
 
   if (displayInfo == 1)
   {
-    printFilledStr(displayTitle, 0);
-    printFilledStr(displayStr, 1);
-    dispCounter += 1;
-    if (dispCounter >= (DISPLAY_TIME * 2))
-    {
-      displayInfo = 0;
-      dispCounter = 0;
-    }
+    printInfo();
     return;
   }
 
-  String s;
-  s = "SETPOINT: " + String((int) Setpoint);
-  printFilledStr(s, 0);
-  s = "INPUT   : " + String((int) Input);
-  printFilledStr(s, 1);
+  printValues();
 }
 
 void pidUpdate()
@@ -333,6 +323,7 @@ void pidUpdate()
     Setpoint = (double) setpointValue;
   }
 
+  LastInput = Input;
   Input = analogRead(settings.pinInput);
 
   if (pidEnabled == 1)
@@ -340,7 +331,7 @@ void pidUpdate()
     pid.Compute();
     doOutput();
     doWarningLEDS();
-  }  
+  }
 }
 
 void scanMMI()
@@ -835,7 +826,7 @@ void restoreSettings()
     case 1:
     case 2: pid.SetOutputLimits(0, 65535);
       break;
-case3:
+    case 3:
       pid.SetOutputLimits(0, settings.windowSize);
       break;
   }
@@ -992,5 +983,73 @@ void doWarningLEDS()
 void printFilledStr(String s, int row)
 {
   lcd.setCursor(0, row);
-  lcd.print(filledStr(s, 16));
+  lcd.print(rightFilledStr(s, 16));
+}
+
+void printError(String caption, String message, byte *code)
+{
+  printFilledStr(caption, 0);
+  printFilledStr(message, 1);
+  dispCounter += 1;
+  if (dispCounter >= DISPLAY_TIME)
+  {
+    *code = 0;
+    dispCounter = 0;
+  }
+}
+
+void printEntering()
+{
+  printFilledStr("ENTER MMI CODE", 0);
+  if (blnk == 0)
+  {
+    printFilledStr(MMI, 1);
+  }
+  else
+  {
+    printFilledStr(MMI + '_', 1);
+  }
+  blnk += 1;
+  if (blnk == 2) blnk = 0;
+}
+
+void printInfo()
+{
+  printFilledStr(displayTitle, 0);
+  printFilledStr(displayStr, 1);
+  dispCounter += 1;
+  if (dispCounter >= (DISPLAY_TIME * 2))
+  {
+    displayInfo = 0;
+    dispCounter = 0;
+  }
+}
+
+void printCustomChar(byte ch, byte col, byte row)
+{
+  lcd.setCursor(col, row);
+  lcd.write(ch);
+}
+
+void printValues()
+{
+  String s;
+  s = "SV:" + leftFilledStr(String((unsigned int) Setpoint), 4);
+  s += " PV:" + leftFilledStr(String((unsigned int) Input), 4);
+  printFilledStr(s, 0);
+  s = "OV:" + leftFilledStr(String((unsigned int) Output), 5);
+  printFilledStr(s, 1);
+
+  if (pidEnabled == 1)
+  {
+    if (Input > LastInput)
+    {
+      printCustomChar(0, 15, 0);
+    }
+    else if (Input < LastInput)
+    {
+      printCustomChar(1, 15, 0);
+    }
+  }
+
 }

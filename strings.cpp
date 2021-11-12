@@ -43,7 +43,25 @@ String getParam(String data, char separator, int index)
   }
 }
 
-String filledStr(String s, int maxlen)
+String leftFilledStr(String s, int maxlen)
+{
+  int len = s.length();
+  if (len > maxlen)
+  {
+    return s.substring(0, maxlen);
+  }
+
+  int i;
+  String result = "";
+  for (i = 0; i < (maxlen-len); i++)
+  {
+    result += " ";
+  }
+  result += s;
+  return result;
+}
+
+String rightFilledStr(String s, int maxlen)
 {
   int len = s.length();
   if (len > maxlen)

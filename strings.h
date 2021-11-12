@@ -5,7 +5,8 @@
 
 String trimAll(String s);
 String getParam(String data, char separator, int index);
-String filledStr(String s, int maxlen);
+String leftFilledStr(String s, int maxlen);
+String rightFilledStr(String s, int maxlen);
 
 
 #endif
