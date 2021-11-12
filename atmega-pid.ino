@@ -128,6 +128,28 @@ byte downArrow[] = {
   B00100
 };
 
+byte switchOff[] = {
+  B01110,
+  B00100,
+  B11111,
+  B00000,
+  B00000,
+  B11111,
+  B11111,
+  B01010
+};
+
+byte switchOn[] = {
+  B00000,
+  B00000,
+  B01110,
+  B00100,
+  B11111,
+  B11111,
+  B11111,
+  B01010
+};
+
 byte lock = 0;
 byte blnk = 0;
 byte idle = 0;
@@ -137,7 +159,7 @@ byte invalidMMI = 0;
 byte invalidPin = 0;
 byte dispCounter = 0;
 byte idleCounter = 0;
-
+byte swOn = 0;
 byte pidEnabled = 0;
 unsigned long windowStartTime;
 int setpointValue = 0;
@@ -205,6 +227,8 @@ void setup()
   lcd.init();
   lcd.createChar(0, upArrow);
   lcd.createChar(1, downArrow);
+  lcd.createChar(2, switchOff);
+  lcd.createChar(3, switchOn);
   lcd.backlight();
 
   Sch.init();
@@ -939,11 +963,13 @@ void doOutput()
         {
           digitalWrite(settings.pinOutput, (1 - settings.relayHigh));
           if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, LOW);
+          swOn = 0;
         }
         else
         {
           digitalWrite(settings.pinOutput, settings.relayHigh);
           if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, HIGH);
+          swOn = 1; 
         }
       }
       break;
@@ -1049,6 +1075,18 @@ void printValues()
     else if (Input < LastInput)
     {
       printCustomChar(1, 15, 0);
+    }
+
+    if (settings.pidMode == 3) //SSR
+    {
+      if (swOn == 0)
+      {
+        printCustomChar(2, 9, 1);
+      }
+      else
+      {
+        printCustomChar(3, 9, 1);
+      }
     }
   }
 
