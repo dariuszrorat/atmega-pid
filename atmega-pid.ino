@@ -42,10 +42,10 @@
 #include "limits.h"
 #include "pins.h"
 #include "pwmio.h"
+#include "mmicode.h"
 #include "scheduler.h"
 
 #define BUZZ_PIN 6
-#define NUM_COMMANDS 25
 #define DISPLAY_TIME 3 // 3x2s
 #define IDLE_TIME 75 // 1,25*60s
 #define DEFAULT_INPUT_PIN 14
@@ -70,35 +70,6 @@ char hexaKeys[ROWS][COLS] = {
   {'4', '5', '6', 'B'},
   {'7', '8', '9', 'C'},
   {'*', '0', '#', 'D'}
-};
-
-const char* MMI_COMMANDS[NUM_COMMANDS]
-{
-  "*00*",
-  "*01*",
-  "*10*",
-  "*11*",
-  "*12*",
-  "*13*",
-  "*14*",
-  "*15*",
-  "*16*",
-  "*17*",
-  "*18*",
-  "*20*",
-  "*21*",
-  "*22*",
-  "*23*",
-  "*24*",
-  "*25*",
-  "*26*",
-  "*31*",
-  "*32*",
-  "*33*",
-  "*41*",
-  "*42*",
-  "*51*",
-  "*52*"
 };
 
 byte rowPins[ROWS] = {13, 12, 11, 8};
@@ -196,8 +167,8 @@ Settings settings;
 
 PID pid(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
-String MMI = "";
-String lastMMI = "";
+String shortcode = "";
+String lastShortcode = "";
 String displayTitle = "";
 String displayStr = "";
 
@@ -236,6 +207,33 @@ void setup()
   Sch.add(keyUpdate, 1);
   Sch.add(pidUpdate, 1);
 
+  Mmi.init();
+  Mmi.add("*00*", repeatLastCode);
+  Mmi.add("*01*", printParams);
+  Mmi.add("*10*", setKpValue);
+  Mmi.add("*11*", setKiValue);
+  Mmi.add("*12*", setKdValue);
+  Mmi.add("*13*", setPOnE);
+  Mmi.add("*14*", setDirection);
+  Mmi.add("*15*", setPIDMode);
+  Mmi.add("*16*", setRelayHighState);
+  Mmi.add("*17*", setRelayWindow);
+  Mmi.add("*18*", setSampleTime);
+  Mmi.add("*20*", setInputPin);
+  Mmi.add("*21*", setSetpointPin);
+  Mmi.add("*22*", setOutputPin);
+  Mmi.add("*23*", setUseInputAsSetpoint);
+  Mmi.add("*24*", setDigitalPinState);
+  Mmi.add("*25*", setDesiredInput);
+  Mmi.add("*26*", setDualPWMPair);
+  Mmi.add("*31*", setClipAlarmPin);
+  Mmi.add("*32*", setTooLowAlarmPin);
+  Mmi.add("*33*", setSSRInfoPin);
+  Mmi.add("*41*", enableRegulator);
+  Mmi.add("*42*", disableRegulator);
+  Mmi.add("*51*", saveSettings);
+  Mmi.add("*52*", loadSettings);
+
   printFilledStr("WELCOME TO MMI", 0);
   printFilledStr("PID CONTROLLER", 1);
   delay(2000);
@@ -271,28 +269,28 @@ void keyUpdate()
     {
       case 'A':
         {
-          MMI = "";
+          shortcode = "";
           entering = 0;
         }
         break;
       case 'B':
         {
-          MMI = MMI.substring(0, MMI.length() - 1);
+          shortcode = shortcode.substring(0, shortcode.length() - 1);
         }
         break;
-      case 'C': MMI = ""; break;
+      case 'C': shortcode = ""; break;
       case 'D':
         {
           scanMMI();
-          lastMMI = MMI;
-          MMI = "";
+          lastShortcode = shortcode;
+          shortcode = "";
         }
         break;
       default:
         {
-          if (MMI.length() < 16)
+          if (shortcode.length() < 16)
           {
-            MMI += key;
+            shortcode += key;
           }
         }
         break;
@@ -360,365 +358,320 @@ void pidUpdate()
 
 void scanMMI()
 {
-  int i;
   invalidMMI = 1;
-
   entering = 1;
-  String cmd = MMI.substring(0, 4);
-  String params = MMI.substring(4, MMI.length() - 1);
-  String existingCmd;
+  bool execResult = Mmi.exec(shortcode);
+  invalidMMI = execResult ? 0 : 1;
+  entering = execResult ? 0 : 1;
+}
 
-  int len = MMI.length();
-
-  for (i = 0; i < NUM_COMMANDS; i++)
+void repeatLastCode(long val0, long val1, long val2)
+{
+  if (lastShortcode != "")
   {
-    existingCmd = String(MMI_COMMANDS[i]);
-    if (cmd == existingCmd)
-    {
-      invalidMMI = 0;
-      entering = 0;
-      break;
-    }
-  }
-
-  if ((len > 0) && (MMI[len - 1] != '#'))
-  {
-    invalidMMI = 1;
-    entering = 1;
-  }
-
-  if (invalidMMI == 0)
-  {
-    execMMI(cmd, params);
+    shortcode = lastShortcode;
+    scanMMI();
   }
 }
 
-
-void execMMI(String cmd, String params)
+void printParams(long val0, long val1, long val2)
 {
-  String cm = cmd.substring(1, 3);
-  int command = cm.toInt();
-  String svalue0 = trimAll(getParam(params, '*', 0));
-  String svalue1 = trimAll(getParam(params, '*', 1));
-
-  switch (command)
+  if (pidEnabled == 0)
   {
-    case 00: //repeat last MMI command
-      {
-        if (lastMMI != "")
-        {
-          MMI = lastMMI;
-          scanMMI();
-        }
-      }
-      break;
-    case 01:
-      {
-        if (pidEnabled == 0)
-        {
-          const char* modes[4] = {"PWM", "PWM 16", "DUAL PWM", "SSR"};
-          String s = String(modes[settings.pidMode]);
-          printFilledStr("SETTINGS", 0);
-          printFilledStr("KP=" + String(settings.Kp), 1);
-          delay(2000);
-          printFilledStr("KI=" + String(settings.Ki), 1);
-          delay(2000);
-          printFilledStr("KD=" + String(settings.Kd), 1);
-          delay(2000);
-          printFilledStr("MODE: " + s, 1);
-          delay(2000);
-        }
-        else
-        {
-          displayTitle = "ERROR";
-          displayStr = "PID IS ACTIVE";
-          displayInfo = 1;
-        }
-      }
-      break;
-
-    case 10:
-      {
-        long value = limitValue(svalue0.toInt(), 0, 2147483647);
-        settings.Kp = (double) value / 100.0;
-        pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-      }
-      break;
-    case 11:
-      {
-        long value = limitValue(svalue0.toInt(), 0, 2147483647);
-        settings.Ki = (double) value / 100.0;
-        pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-      }
-      break;
-    case 12:
-      {
-        long value = limitValue(svalue0.toInt(), 0, 2147483647);
-        settings.Kd = (double) value / 100.0;
-        pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-      }
-      break;
-    case 13:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 1);
-        settings.pOnE = value;
-        pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-      }
-      break;
-    case 14:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 1);
-        settings.controllerDirection = value;
-        pid.SetControllerDirection(settings.controllerDirection);
-      }
-      break;
-    case 15:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 3);
-        settings.pidMode = value;
-        switch (settings.pidMode)
-        {
-          case 0: pid.SetOutputLimits(0, 255); break;
-          case 1: {
-              pid.SetOutputLimits(0, 65535);
-              setupPWM16();
-            } break;
-          case 2: pid.SetOutputLimits(0, 65535); break;
-          case 3: pid.SetOutputLimits(0, settings.windowSize); break;
-        }
-
-        windowStartTime = millis();
-      }
-      break;
-    case 16:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 1);
-        settings.relayHigh = value;
-      }
-      break;
-    case 17:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 32767);
-        settings.windowSize = value;
-        switch (settings.pidMode)
-        {
-          case 0: pid.SetOutputLimits(0, 255); break;
-          case 1: {
-              pid.SetOutputLimits(0, 65535);
-              setupPWM16();
-            } break;
-          case 2: pid.SetOutputLimits(0, 65535); break;
-          case 3: pid.SetOutputLimits(0, settings.windowSize); break;
-        }
-      }
-      break;
-    case 18:
-      {
-        int value = limitValue(svalue0.toInt(), 50, 32767);
-        settings.sampleTime = value;
-        pid.SetSampleTime(settings.sampleTime);
-      }
-      break;
-
-
-    case 20:
-      {
-        int pin = svalue0.toInt();
-        invalidPin = checkAnalogPin(pin) ? 0 : 1;
-        if (invalidPin == 0)
-        {
-          settings.pinInput = pin;
-          pinMode(pin, INPUT);
-        }
-      }
-      break;
-    case 21:
-      {
-        int pin = svalue0.toInt();
-        invalidPin = checkAnalogPin(pin) ? 0 : 1;
-        if (invalidPin == 0)
-        {
-          settings.pinSetpoint = pin;
-          pinMode(pin, INPUT);
-        }
-      }
-      break;
-    case 22:
-      {
-        int pin = svalue0.toInt();
-        switch (settings.pidMode)
-        {
-          case 0: {
-              invalidPin = checkPWMPin(pin) ? 0 : 1;
-            } break;
-          case 1: {
-              invalidPin = checkPWMPin(pin) ? 0 : 1;
-              setupPWM16();
-            } break;
-          case 2: {
-              invalidPin = checkPWMPin(pin) ? 0 : 1;
-            } break;
-          case 3: {
-              invalidPin = checkDigitalPin(pin) ? 0 : 1;
-            } break;
-        }
-
-        if (invalidPin == 0)
-        {
-          settings.pinOutput = pin;
-          pinMode(pin, OUTPUT);
-        }
-      }
-      break;
-    case 23:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 1);
-        settings.inputAsSetpoint = value;
-      }
-      break;
-    case 24:
-      {
-        int pin = svalue0.toInt();
-        invalidPin = checkDigitalPin(pin) ? 0 : 1;
-        if (invalidPin == 0)
-        {
-          int value = limitValue(svalue1.toInt(), 0, 1);
-          pinMode(pin, OUTPUT);
-          digitalWrite(pin, value);
-        }
-      }
-      break;
-    case 25:
-      {
-        int value = limitValue(svalue0.toInt(), 0, 1023);
-        Setpoint = (double) value;
-      }
-      break;
-    case 26:
-      {
-        int pinH = svalue0.toInt();
-        int pinL = svalue1.toInt();
-        invalidPin = (checkPWMPin(pinH) && checkPWMPin(pinL)) ? 0 : 1;
-        if (invalidPin == 0)
-        {
-          settings.pinOutputPWM16H = pinH;
-          settings.pinOutputPWM16L = pinL;
-          pinMode(pinH, OUTPUT);
-          pinMode(pinL, OUTPUT);
-        }
-      }
-      break;
-
-    case 31:
-      {
-        int pin = svalue0.toInt();
-        int percent = svalue1.toInt();
-        bool validPin = ((checkDigitalPin(pin)
-                          && checkNotBusyPin(pin, settings.pinSetpoint, settings.pinInput, settings.pinOutput)) || (pin == DISABLED_LED_PIN));
-        invalidPin = validPin ? 0 : 1;
-
-        if (invalidPin == 0)
-        {
-          if (settings.pinClip != DISABLED_LED_PIN)
-          {
-            pinMode(settings.pinClip, OUTPUT);
-            digitalWrite(settings.pinClip, LOW);
-          }
-          if (pin != DISABLED_LED_PIN)
-            pinMode(pin, OUTPUT);
-          settings.pinClip = pin;
-          settings.percentClip = percent;
-        }
-      }
-      break;
-    case 32:
-      {
-        int pin = svalue0.toInt();
-        int percent = svalue1.toInt();
-        bool validPin = ((checkDigitalPin(pin)
-                          && checkNotBusyPin(pin, settings.pinSetpoint, settings.pinInput, settings.pinOutput)) || (pin == DISABLED_LED_PIN));
-        invalidPin = validPin ? 0 : 1;
-
-        if (invalidPin == 0)
-        {
-          if (settings.pinTooLow != DISABLED_LED_PIN)
-          {
-            pinMode(settings.pinTooLow, OUTPUT);
-            digitalWrite(settings.pinTooLow, LOW);
-          }
-          if (pin != DISABLED_LED_PIN)
-            pinMode(pin, OUTPUT);
-          settings.pinTooLow = pin;
-          settings.percentTooLow = percent;
-        }
-      }
-      break;
-    case 33:
-      {
-        int pin = svalue0.toInt();
-        bool validPin = ((checkDigitalPin(pin)
-                          && checkNotBusyPin(pin, settings.pinSetpoint, settings.pinInput, settings.pinOutput)) || (pin == DISABLED_LED_PIN));
-        invalidPin = validPin ? 0 : 1;
-
-        if (invalidPin == 0)
-        {
-          if (settings.pinSSRActive != DISABLED_LED_PIN)
-          {
-            pinMode(settings.pinSSRActive, OUTPUT);
-            digitalWrite(settings.pinSSRActive, LOW);
-          }
-          if (pin != DISABLED_LED_PIN)
-            pinMode(pin, OUTPUT);
-          settings.pinSSRActive = pin;
-        }
-      }
-      break;
-
-    case 41:
-      {
-        pidEnabled = 1;
-        displayTitle = "INFO";
-        displayStr = "PID ENABLED";
-        displayInfo = 1;
-      }
-      break;
-    case 42:
-      {
-        pidEnabled = 0;
-        displayTitle = "INFO";
-        displayStr = "PID DISABLED";
-        displayInfo = 1;
-        Output = 0;
-        disableAllOutputs();
-      }
-      break;
-
-    case 51:
-      {
-        EEPROM.put(0, settings);
-        displayTitle = "SAVE SETTINGS";
-        displayStr = "OK";
-        displayInfo = 1;
-      }
-      break;
-    case 52:
-      {
-        if (pidEnabled == 0)
-        {
-          EEPROM.get(0, settings);
-          restoreSettings();
-          displayTitle = "LOAD SETTINGS";
-          displayStr = "OK";
-        }
-        else
-        {
-          displayTitle = "ERROR";
-          displayStr = "PID IS ENABLED";
-        }
-        displayInfo = 1;
-      }
-      break;
+    const char* modes[4] = {"PWM", "PWM 16", "DUAL PWM", "SSR"};
+    String s = String(modes[settings.pidMode]);
+    printFilledStr("SETTINGS", 0);
+    printFilledStr("KP=" + String(settings.Kp), 1);
+    delay(2000);
+    printFilledStr("KI=" + String(settings.Ki), 1);
+    delay(2000);
+    printFilledStr("KD=" + String(settings.Kd), 1);
+    delay(2000);
+    printFilledStr("MODE: " + s, 1);
+    delay(2000);
   }
+  else
+  {
+    displayTitle = "ERROR";
+    displayStr = "PID IS ACTIVE";
+    displayInfo = 1;
+  }
+}
+
+void setKpValue(long val0, long val1, long val2)
+{
+  long value = limitValue(val0, 0, 2147483647);
+  settings.Kp = (double) value / 100.0;
+  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+}
+
+void setKiValue(long val0, long val1, long val2)
+{
+  long value = limitValue(val0, 0, 2147483647);
+  settings.Ki = (double) value / 100.0;
+  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+}
+
+void setKdValue(long val0, long val1, long val2)
+{
+  long value = limitValue(val0, 0, 2147483647);
+  settings.Kd = (double) value / 100.0;
+  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+}
+
+void setPOnE(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 1);
+  settings.pOnE = value;
+  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+}
+
+void setDirection(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 1);
+  settings.controllerDirection = value;
+  pid.SetControllerDirection(settings.controllerDirection);
+}
+
+void setPIDMode(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 3);
+  settings.pidMode = value;
+  switch (settings.pidMode)
+  {
+    case 0: pid.SetOutputLimits(0, 255); break;
+    case 1: {
+        pid.SetOutputLimits(0, 65535);
+        setupPWM16();
+      } break;
+    case 2: pid.SetOutputLimits(0, 65535); break;
+    case 3: pid.SetOutputLimits(0, settings.windowSize); break;
+  }
+
+  windowStartTime = millis();
+}
+
+void setRelayHighState(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 1);
+  settings.relayHigh = value;
+}
+
+void setRelayWindow(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 32767);
+  settings.windowSize = value;
+  switch (settings.pidMode)
+  {
+    case 0: pid.SetOutputLimits(0, 255); break;
+    case 1: {
+        pid.SetOutputLimits(0, 65535);
+        setupPWM16();
+      } break;
+    case 2: pid.SetOutputLimits(0, 65535); break;
+    case 3: pid.SetOutputLimits(0, settings.windowSize); break;
+  }
+}
+
+void setSampleTime(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 50, 32767);
+  settings.sampleTime = value;
+  pid.SetSampleTime(settings.sampleTime);
+}
+
+void setInputPin(long val0, long val1, long val2)
+{
+  int pin = val0;
+  invalidPin = checkAnalogPin(pin) ? 0 : 1;
+  if (invalidPin == 0)
+  {
+    settings.pinInput = pin;
+    pinMode(pin, INPUT);
+  }
+}
+
+void setSetpointPin(long val0, long val1, long val2)
+{
+  int pin = val0;
+  invalidPin = checkAnalogPin(pin) ? 0 : 1;
+  if (invalidPin == 0)
+  {
+    settings.pinSetpoint = pin;
+    pinMode(pin, INPUT);
+  }
+}
+
+void setOutputPin(long val0, long val1, long val2)
+{
+  int pin = val0;
+  switch (settings.pidMode)
+  {
+    case 0: {
+        invalidPin = checkPWMPin(pin) ? 0 : 1;
+      } break;
+    case 1: {
+        invalidPin = checkPWMPin(pin) ? 0 : 1;
+        setupPWM16();
+      } break;
+    case 2: {
+        invalidPin = checkPWMPin(pin) ? 0 : 1;
+      } break;
+    case 3: {
+        invalidPin = checkDigitalPin(pin) ? 0 : 1;
+      } break;
+  }
+
+  if (invalidPin == 0)
+  {
+    settings.pinOutput = pin;
+    pinMode(pin, OUTPUT);
+  }
+}
+
+void setUseInputAsSetpoint(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 1);
+  settings.inputAsSetpoint = value;
+}
+
+void setDigitalPinState(long val0, long val1, long val2)
+{
+  int pin = val0;
+  invalidPin = checkDigitalPin(pin) ? 0 : 1;
+  if (invalidPin == 0)
+  {
+    int value = limitValue(val1, 0, 1);
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, value);
+  }
+}
+
+void setDesiredInput(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 0, 1023);
+  Setpoint = (double) value;
+}
+
+void setDualPWMPair(long val0, long val1, long val2)
+{
+  int pinH = val0;
+  int pinL = val1;
+  invalidPin = (checkPWMPin(pinH) && checkPWMPin(pinL)) ? 0 : 1;
+  if (invalidPin == 0)
+  {
+    settings.pinOutputPWM16H = pinH;
+    settings.pinOutputPWM16L = pinL;
+    pinMode(pinH, OUTPUT);
+    pinMode(pinL, OUTPUT);
+  }
+}
+
+void setClipAlarmPin(long val0, long val1, long val2)
+{
+  int pin = val0;
+  int percent = val1;
+  bool validPin = ((checkDigitalPin(pin)
+                    && checkNotBusyPin(pin, settings.pinSetpoint, settings.pinInput, settings.pinOutput)) || (pin == DISABLED_LED_PIN));
+  invalidPin = validPin ? 0 : 1;
+
+  if (invalidPin == 0)
+  {
+    if (settings.pinClip != DISABLED_LED_PIN)
+    {
+      pinMode(settings.pinClip, OUTPUT);
+      digitalWrite(settings.pinClip, LOW);
+    }
+    if (pin != DISABLED_LED_PIN)
+      pinMode(pin, OUTPUT);
+    settings.pinClip = pin;
+    settings.percentClip = percent;
+  }
+}
+
+void setTooLowAlarmPin(long val0, long val1, long val2)
+{
+  int pin = val0;
+  int percent = val1;
+  bool validPin = ((checkDigitalPin(pin)
+                    && checkNotBusyPin(pin, settings.pinSetpoint, settings.pinInput, settings.pinOutput)) || (pin == DISABLED_LED_PIN));
+  invalidPin = validPin ? 0 : 1;
+
+  if (invalidPin == 0)
+  {
+    if (settings.pinTooLow != DISABLED_LED_PIN)
+    {
+      pinMode(settings.pinTooLow, OUTPUT);
+      digitalWrite(settings.pinTooLow, LOW);
+    }
+    if (pin != DISABLED_LED_PIN)
+      pinMode(pin, OUTPUT);
+    settings.pinTooLow = pin;
+    settings.percentTooLow = percent;
+  }
+}
+
+void setSSRInfoPin(long val0, long val1, long val2)
+{
+  int pin = val0;
+  bool validPin = ((checkDigitalPin(pin)
+                    && checkNotBusyPin(pin, settings.pinSetpoint, settings.pinInput, settings.pinOutput)) || (pin == DISABLED_LED_PIN));
+  invalidPin = validPin ? 0 : 1;
+
+  if (invalidPin == 0)
+  {
+    if (settings.pinSSRActive != DISABLED_LED_PIN)
+    {
+      pinMode(settings.pinSSRActive, OUTPUT);
+      digitalWrite(settings.pinSSRActive, LOW);
+    }
+    if (pin != DISABLED_LED_PIN)
+      pinMode(pin, OUTPUT);
+    settings.pinSSRActive = pin;
+  }
+}
+
+void enableRegulator(long val0, long val1, long val2)
+{
+  pidEnabled = 1;
+  displayTitle = "INFO";
+  displayStr = "PID ENABLED";
+  displayInfo = 1;
+}
+
+void disableRegulator(long val0, long val1, long val2)
+{
+  pidEnabled = 0;
+  displayTitle = "INFO";
+  displayStr = "PID DISABLED";
+  displayInfo = 1;
+  Output = 0;
+  disableAllOutputs();
+}
+
+void saveSettings(long val0, long val1, long val2)
+{
+  EEPROM.put(0, settings);
+  displayTitle = "SAVE SETTINGS";
+  displayStr = "OK";
+  displayInfo = 1;
+}
+
+void loadSettings(long val0, long val1, long val2)
+{
+  if (pidEnabled == 0)
+  {
+    EEPROM.get(0, settings);
+    restoreSettings();
+    displayTitle = "LOAD SETTINGS";
+    displayStr = "OK";
+  }
+  else
+  {
+    displayTitle = "ERROR";
+    displayStr = "PID IS ENABLED";
+  }
+  displayInfo = 1;
 }
 
 void disableAllOutputs()
@@ -969,7 +922,7 @@ void doOutput()
         {
           digitalWrite(settings.pinOutput, settings.relayHigh);
           if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, HIGH);
-          swOn = 1; 
+          swOn = 1;
         }
       }
       break;
@@ -1029,11 +982,11 @@ void printEntering()
   printFilledStr("ENTER MMI CODE", 0);
   if (blnk == 0)
   {
-    printFilledStr(MMI, 1);
+    printFilledStr(shortcode, 1);
   }
   else
   {
-    printFilledStr(MMI + '_', 1);
+    printFilledStr(shortcode + '_', 1);
   }
   blnk += 1;
   if (blnk == 2) blnk = 0;
@@ -1063,7 +1016,8 @@ void printValues()
   s = "SV:" + leftFilledStr(String((unsigned int) Setpoint), 4);
   s += " PV:" + leftFilledStr(String((unsigned int) Input), 4);
   printFilledStr(s, 0);
-  s = "OV:" + leftFilledStr(String((unsigned int) Output), 5);
+  byte len = settings.pidMode == 0 ? 4 : 5;
+  s = "OV:" + leftFilledStr(String((unsigned int) Output), len);
   printFilledStr(s, 1);
 
   if (pidEnabled == 1)
