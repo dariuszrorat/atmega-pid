@@ -912,17 +912,17 @@ void doOutput()
         { //time to shift the Relay Window
           windowStartTime += settings.windowSize;
         }
-        if (Output < millis() - windowStartTime)
-        {
-          digitalWrite(settings.pinOutput, (1 - settings.relayHigh));
-          if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, LOW);
-          swOn = 0;
-        }
-        else
+        if (Output > millis() - windowStartTime)
         {
           digitalWrite(settings.pinOutput, settings.relayHigh);
           if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, HIGH);
           swOn = 1;
+        }
+        else
+        {
+          digitalWrite(settings.pinOutput, (1 - settings.relayHigh));
+          if (settings.pinSSRActive != DISABLED_LED_PIN) digitalWrite(settings.pinSSRActive, LOW);
+          swOn = 0;
         }
       }
       break;
