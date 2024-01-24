@@ -4,38 +4,38 @@
 
     MMI codes:
 
-      00*#           repeat the last code
-      01*#           print Kp, Ki, Kd and PID mode params
-      10*XXXX#       set P param value divided by 100
-      11*XXXX#       set I param value divided by 100
-      12*XXXX#       set D param value divided by 100
-      13*X#          set proportional on measurement X=0 or error X=1
-      14*X#          set direction X=0 means direct, X=1 means reverse
-      15*X#          set PID mode 0 = PWM, 1 = PWM16, 2 = Dual PWM, 3 = SSR
-      16*X#          set relay high state X = 0 or 1
-      17*XXXX#       set relay mode window size ms
-      18*XXXX#       set PID sample time ms
-      20*XX#         set input analog pin
-      21*XX#         set setpoint analog pin
-      22*XX#         set output digital relay or PWM pin
-      23*X#          set use analog input as setpoint X = 0 or 1
-      24*XX*Y#       set digital pin as 0 or 1
-      25*XXXX#       set desired analog input 0..1023
-      26*XX*YY#      set 16 bit mode PWM output MSB (XX) and LSB (YY) pair
-      31*XX*YY#      set the clip alarm LED pin XX to XX SP percent
-      32*XX*YY#      set too low input value LED pin XX to XX SP percent
-      33*XX#         set SSR mode relay enable information LED pin
-      41*#           enable PID regulator
-      42*#           disable PID regulator
-      51*#           save settings to EEPROM
-      52*#           load settings from EEPROM
+      *00*#           repeat the last code
+      *01*#           print Kp, Ki, Kd and PID mode params
+      *10*XXXX#       set P param value divided by 100
+      *11*XXXX#       set I param value divided by 100
+      *12*XXXX#       set D param value divided by 100
+      *13*X#          set proportional on measurement X=0 or error X=1
+      *14*X#          set direction X=0 means direct, X=1 means reverse
+      *15*X#          set PID mode 0 = PWM, 1 = PWM16, 2 = Dual PWM, 3 = SSR
+      *16*X#          set relay high state X = 0 or 1
+      *17*XXXX#       set relay mode window size ms
+      *18*XXXX#       set PID sample time ms
+      *20*XX#         set input analog pin
+      *21*XX#         set setpoint analog pin
+      *22*XX#         set output digital relay or PWM pin
+      *23*X#          set use analog input as setpoint X = 0 or 1
+      *24*XX*Y#       set digital pin as 0 or 1
+      *25*XXXX#       set desired analog input 0..1023
+      *26*XX*YY#      set 16 bit mode PWM output MSB (XX) and LSB (YY) pair
+      *31*XX*YY#      set the clip alarm LED pin XX to XX SP percent
+      *32*XX*YY#      set too low input value LED pin XX to XX SP percent
+      *33*XX#         set SSR mode relay enable information LED pin
+      *41*#           enable PID regulator
+      *42*#           disable PID regulator
+      *51*#           save settings to EEPROM
+      *52*#           load settings from EEPROM
 
 */
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
-#include <PID_v1.h>
+#include <PID_v1_bc.h>
 #include <EEPROM.h>
 
 #include "strings.h"
