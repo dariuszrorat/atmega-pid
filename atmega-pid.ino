@@ -306,7 +306,8 @@ void keyUpdate()
 void ledUpdate()
 {
   idleCounter += 1;
-  if (idleCounter == (2 * settings.idleTime * 1.25))
+  //experimental 1.55 * idleTime to real default 60s
+  if (idleCounter == (1.55 * settings.idleTime))
   {
     lcd.setBacklight(0);
     idleCounter = 0;
@@ -805,7 +806,7 @@ void restoreSettings()
     settings.sampleTime = DEFAULT_SAMPLE_TIME;
   }
 
-  if ((settings.idleTime < 1) || (settings.idleTime > 32767))
+  if ((settings.idleTime < 10) || (settings.idleTime > 32767))
   {
     settings.idleTime = DEFAULT_IDLE_TIME;
   }
