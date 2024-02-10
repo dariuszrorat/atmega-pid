@@ -46,3 +46,5 @@ The dual PWM 16 use 2 PWM 8 bit outputs
 http://www.openmusiclabs.com/learning/digital/pwm-dac/dual-pwm-circuits/index.html
 
 Default values are P=1.0, I=0.0, D=0.0, standard 8 bit PWM output, sample time 100ms.
+
+![Circuit.](circuit.png "Circuit.")
