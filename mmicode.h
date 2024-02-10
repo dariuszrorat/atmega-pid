@@ -4,7 +4,7 @@
 #include "Arduino.h"
 #include "strings.h"
 
-#define MAX_CALLBACKS (25)
+#define MAX_CALLBACKS (26)
 
 typedef struct
 {
