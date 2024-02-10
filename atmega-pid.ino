@@ -15,6 +15,7 @@
       *16*X#          set relay high state X = 0 or 1
       *17*XXXX#       set relay mode window size ms
       *18*XXXX#       set PID sample time ms
+      *19*XXXX#       set backlight IDLE time s
       *20*XX#         set input analog pin
       *21*XX#         set setpoint analog pin
       *22*XX#         set output digital relay or PWM pin
@@ -47,7 +48,6 @@
 
 #define BUZZ_PIN 6
 #define DISPLAY_TIME 3 // 3x2s
-#define IDLE_TIME 75 // 1,25*60s
 #define DEFAULT_INPUT_PIN 14
 #define DEFAULT_SETPOINT_PIN 15
 #define DEFAULT_OUTPUT_PIN_PWM16_H 9
@@ -55,6 +55,7 @@
 #define DEFAULT_OUTPUT_PIN 9
 #define DEFAULT_WINDOW_SIZE 5000
 #define DEFAULT_SAMPLE_TIME 100
+#define DEFAULT_IDLE_TIME 60
 #define DISABLED_LED_PIN 255
 #define DEFAULT_P 1.0
 #define DEFAULT_I 0.0
@@ -161,6 +162,7 @@ struct Settings
   int pinTooLow;
   int percentTooLow;
   int pinSSRActive;
+  int idleTime;
 };
 
 Settings settings;
@@ -219,6 +221,7 @@ void setup()
   Mmi.add("*16*", setRelayHighState);
   Mmi.add("*17*", setRelayWindow);
   Mmi.add("*18*", setSampleTime);
+  Mmi.add("*19*", setIdleTime);
   Mmi.add("*20*", setInputPin);
   Mmi.add("*21*", setSetpointPin);
   Mmi.add("*22*", setOutputPin);
@@ -303,7 +306,7 @@ void keyUpdate()
 void ledUpdate()
 {
   idleCounter += 1;
-  if (idleCounter == (2 * IDLE_TIME))
+  if (idleCounter == (2 * settings.idleTime * 1.25))
   {
     lcd.setBacklight(0);
     idleCounter = 0;
@@ -478,6 +481,12 @@ void setSampleTime(long val0, long val1, long val2)
   int value = limitValue(val0, 50, 32767);
   settings.sampleTime = value;
   pid.SetSampleTime(settings.sampleTime);
+}
+
+void setIdleTime(long val0, long val1, long val2)
+{
+  int value = limitValue(val0, 10, 32767);
+  settings.idleTime = value;
 }
 
 void setInputPin(long val0, long val1, long val2)
@@ -713,6 +722,7 @@ void loadDefaults()
   settings.pinTooLow = DISABLED_LED_PIN; // means that pin is not set
   settings.percentTooLow = 0;
   settings.pinSSRActive = DISABLED_LED_PIN; // means that pin is not set
+  settings.idleTime = 60;
 }
 
 void restoreSettings()
@@ -793,6 +803,11 @@ void restoreSettings()
   if ((settings.sampleTime < 0) || (settings.sampleTime > 32767))
   {
     settings.sampleTime = DEFAULT_SAMPLE_TIME;
+  }
+
+  if ((settings.idleTime < 1) || (settings.idleTime > 32767))
+  {
+    settings.idleTime = DEFAULT_IDLE_TIME;
   }
 
   switch (settings.pidMode)

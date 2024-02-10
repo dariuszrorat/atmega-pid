@@ -22,6 +22,7 @@ This directory contains simple MMI PID regulator for ATMEGA328/Arduino.
       *16*X#          set relay high state X = 0 or 1
       *17*XXXX#       set relay mode window size ms
       *18*XXXX#       set PID sample time ms
+      *19*XXXX#       set backlight IDLE time s
       *20*XX#         set input analog pin
       *21*XX#         set setpoint analog pin
       *22*XX#         set output digital relay or PWM pin
