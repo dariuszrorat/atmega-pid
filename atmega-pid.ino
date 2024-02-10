@@ -307,7 +307,7 @@ void ledUpdate()
 {
   idleCounter += 1;
   //experimental 1.55 * idleTime to real default 60s
-  if (idleCounter == (1.55 * settings.idleTime))
+  if ((float) idleCounter >= (float) (1.55 * settings.idleTime))
   {
     lcd.setBacklight(0);
     idleCounter = 0;
