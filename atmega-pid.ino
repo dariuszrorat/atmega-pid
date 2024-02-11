@@ -36,7 +36,6 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
-#include <PID_v1_bc.h>
 #include <EEPROM.h>
 
 #include "strings.h"
@@ -138,7 +137,9 @@ unsigned long windowStartTime;
 int setpointValue = 0;
 
 double ValueSetpoint = 0, ValueInput = 0, ValueLastInput = 0;
-double Setpoint = 0, Input = 0, Output = 0;
+double Setpoint = 0, Input = 0, Output = 0, lastInput = 0;
+double outputSum = 0, outMin = 0, outMax = 255;
+unsigned long lastTime = 0;
 double Kp = DEFAULT_P, Ki = DEFAULT_I, Kd = DEFAULT_D;
 double ScalingFactor = DEFAULT_SCALING_FACTOR;
 
@@ -168,8 +169,6 @@ struct Settings {
 
 Settings settings;
 
-PID pid(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
-
 String shortcode = "";
 String lastShortcode = "";
 String displayTitle = "";
@@ -177,6 +176,7 @@ String displayStr = "";
 
 void setup() {
   loadDefaults();
+  scalePidParams();
 
   pinMode(BUZZ_PIN, OUTPUT);
   pinMode(settings.pinInput, INPUT);
@@ -190,11 +190,6 @@ void setup() {
 
   ValueInput = analogRead(settings.pinInput);
   ValueSetpoint = 0;
-
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-  pid.SetControllerDirection(settings.controllerDirection);
-  pid.SetSampleTime(settings.sampleTime);
-  pid.SetMode(AUTOMATIC);
 
   windowStartTime = millis();
 
@@ -237,10 +232,6 @@ void setup() {
   Mmi.add("*42*", disableRegulator);
   Mmi.add("*51*", saveSettings);
   Mmi.add("*52*", loadSettings);
-
-  printFilledStr("WELCOME TO MMI", 0);
-  printFilledStr("PID CONTROLLER", 1);
-  delay(2000);
 }
 
 /* Main Program */
@@ -343,7 +334,7 @@ void pidUpdate() {
   Input = (double) (ValueInput * ScalingFactor);
 
   if (pidEnabled == 1) {
-    pid.Compute();
+    pidCompute();
     doOutput();
     doWarningLEDS();
   }
@@ -387,31 +378,31 @@ void printParams(long val0, long val1, long val2) {
 void setKpValue(long val0, long val1, long val2) {
   long value = limitValue(val0, 0, 2147483647);
   settings.Kp = (double)value / 100.0;
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+  scalePidParams();
 }
 
 void setKiValue(long val0, long val1, long val2) {
   long value = limitValue(val0, 0, 2147483647);
   settings.Ki = (double)value / 100.0;
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+  scalePidParams();
 }
 
 void setKdValue(long val0, long val1, long val2) {
   long value = limitValue(val0, 0, 2147483647);
   settings.Kd = (double)value / 100.0;
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+  scalePidParams();
 }
 
 void setPOnE(long val0, long val1, long val2) {
   int value = limitValue(val0, 0, 1);
   settings.pOnE = value;
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
+  scalePidParams();
 }
 
 void setDirection(long val0, long val1, long val2) {
   int value = limitValue(val0, 0, 1);
   settings.controllerDirection = value;
-  pid.SetControllerDirection(settings.controllerDirection);
+  scalePidParams();
 }
 
 void setPIDMode(long val0, long val1, long val2) {
@@ -420,26 +411,26 @@ void setPIDMode(long val0, long val1, long val2) {
   switch (settings.pidMode) {
     case 0:
       {
-        pid.SetOutputLimits(0, 255);
+        outMin = 0; outMax = 255;  
         ScalingFactor = DEFAULT_SCALING_FACTOR;
       }
       break;
     case 1:
       {
-        pid.SetOutputLimits(0, 65535);
+        outMin = 0; outMax = 65535;  
         setupPWM16();
         ScalingFactor = 65535.0 / 1023.0;
       }
       break;
     case 2:
       {
-        pid.SetOutputLimits(0, 65535);
+        outMin = 0; outMax = 65535;            
         ScalingFactor = 65535.0 / 1023.0;
       }
       break;
     case 3:
       {
-        pid.SetOutputLimits(0, settings.windowSize);
+        outMin = 0; outMax = settings.windowSize;            
         ScalingFactor = (double)settings.windowSize / 1023.0;
       }
       break;
@@ -459,26 +450,26 @@ void setRelayWindow(long val0, long val1, long val2) {
   switch (settings.pidMode) {
     case 0:
       {
-        pid.SetOutputLimits(0, 255);
+        outMin = 0; outMax = 255;    
         ScalingFactor = DEFAULT_SCALING_FACTOR;
       }
       break;
     case 1:
       {
-        pid.SetOutputLimits(0, 65535);
+        outMin = 0; outMax = 65535;            
         setupPWM16();
         ScalingFactor = 65535.0 / 1023.00;
       }
       break;
     case 2:
       {
-        pid.SetOutputLimits(0, 65535);
+        outMin = 0; outMax = 65535;            
         ScalingFactor = 65535.0 / 1023.00;
       }
       break;
     case 3:
       {
-        pid.SetOutputLimits(0, settings.windowSize);
+        outMin = 0; outMax = settings.windowSize;            
         ScalingFactor = (double)settings.windowSize / 1023.00;
       }
       break;
@@ -487,8 +478,8 @@ void setRelayWindow(long val0, long val1, long val2) {
 
 void setSampleTime(long val0, long val1, long val2) {
   int value = limitValue(val0, 50, 32767);
-  settings.sampleTime = value;
-  pid.SetSampleTime(settings.sampleTime);
+  settings.sampleTime = value;  
+  scalePidParams();
 }
 
 void setIdleTime(long val0, long val1, long val2) {
@@ -638,38 +629,28 @@ void setSSRInfoPin(long val0, long val1, long val2) {
 
 void enableRegulator(long val0, long val1, long val2) {
   pidEnabled = 1;
-  displayTitle = "INFO";
-  displayStr = "PID ENABLED";
-  displayInfo = 1;
 }
 
 void disableRegulator(long val0, long val1, long val2) {
   pidEnabled = 0;
-  displayTitle = "INFO";
-  displayStr = "PID DISABLED";
-  displayInfo = 1;
   Output = 0;
+  outputSum = 0;
   disableAllOutputs();
 }
 
 void saveSettings(long val0, long val1, long val2) {
   EEPROM.put(0, settings);
-  displayTitle = "SAVE SETTINGS";
-  displayStr = "OK";
-  displayInfo = 1;
 }
 
 void loadSettings(long val0, long val1, long val2) {
   if (pidEnabled == 0) {
     EEPROM.get(0, settings);
     restoreSettings();
-    displayTitle = "LOAD SETTINGS";
-    displayStr = "OK";
   } else {
     displayTitle = "ERROR";
     displayStr = "PID IS ENABLED";
+    displayInfo = 1;
   }
-  displayInfo = 1;
 }
 
 void disableAllOutputs() {
@@ -786,20 +767,20 @@ void restoreSettings() {
   switch (settings.pidMode) {
     case 0:
       {
-        pid.SetOutputLimits(0, 255);
+        outMin = 0; outMax = 255;            
         ScalingFactor = DEFAULT_SCALING_FACTOR;
       }
       break;
     case 1:
     case 2:
       {
-        pid.SetOutputLimits(0, 65535);
+        outMin = 0; outMax = 65535;            
         ScalingFactor = 65535.0 / 1023.0;
       }
       break;
     case 3:
       {
-        pid.SetOutputLimits(0, settings.windowSize);
+        outMin = 0; outMax = settings.windowSize;            
         ScalingFactor = (double)settings.windowSize / 1023.0;
       }
       break;
@@ -858,13 +839,74 @@ void restoreSettings() {
   if ((settings.pinSSRActive != DISABLED_LED_PIN) && (checkDigitalPin(settings.pinSSRActive))) {
     pinMode(settings.pinSSRActive, OUTPUT);
   }
-
-
-  pid.SetTunings(settings.Kp, settings.Ki, settings.Kd, settings.pOnE);
-  pid.SetControllerDirection(settings.controllerDirection);
-  pid.SetSampleTime(settings.sampleTime);
+  
+  scalePidParams();
 }
 
+void scalePidParams()
+{
+   Kp = settings.Kp;
+   Ki = settings.Ki;
+   Kd = settings.Kd;
+
+   double ratio  = (double)settings.sampleTime
+                      / (double)DEFAULT_SAMPLE_TIME;
+   Ki *= ratio;
+   Kd /= ratio;
+
+   double SampleTimeInSec = ((double)settings.sampleTime)/1000;
+   Ki = Ki * SampleTimeInSec;
+   Kd = Kd / SampleTimeInSec;
+
+  if(settings.controllerDirection == 1)
+   {
+      Kp = (0 - Kp);
+      Ki = (0 - Ki);
+      Kd = (0 - Kd);
+   }
+}
+
+void pidCompute()
+{
+   unsigned long now = millis();
+   unsigned long timeChange = (now - lastTime);
+   byte pOnE = settings.pOnE;
+
+   if(timeChange>=settings.sampleTime)
+   {
+      /*Compute all the working error variables*/
+      double error = Setpoint - Input;
+      double dInput = (Input - lastInput);
+      outputSum += (Ki * error);
+      
+      /*Add Proportional on Measurement, if P_ON_M is specified*/
+      if(!pOnE) outputSum-= Kp * dInput;
+
+      if(outputSum > outMax) outputSum= outMax;
+      else if(outputSum < outMin) outputSum= outMin;
+
+      /*Add Proportional on Error, if P_ON_E is specified*/
+      if(settings.pOnE) Output = Kp * error;
+      else Output = 0;
+
+      /*Compute Rest of PID Output*/
+      Output += outputSum - Kd * dInput;
+
+      if(Output > outMax){
+          outputSum -= Output - outMax; // backcalculate integral to feasability
+          Output = outMax;
+      }
+      else if(Output < outMin) {
+          outputSum += outMin - Output; // backcalculate integral to feasability
+          Output = outMin;
+      }
+
+      /*Remember some variables for next time*/
+      lastInput = Input;
+      lastTime = now;
+   }
+
+}
 void doOutput() {
   switch (settings.pidMode) {
     case 0:
@@ -990,5 +1032,14 @@ void printValues() {
         printCustomChar(3, 9, 1);
       }
     }
+
+    lcd.setCursor(13, 1);
+    lcd.print("ON ");
+
+  }
+  else
+  {
+    lcd.setCursor(13, 1);
+    lcd.print("OFF");
   }
 }

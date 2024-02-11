@@ -40,9 +40,6 @@ This directory contains simple MMI PID regulator for ATMEGA328/Arduino.
 
 ### Other informations
 
-This project using Arduino PID library
-https://playground.arduino.cc/Code/PIDLibrary/
-
 The dual PWM 16 use 2 PWM 8 bit outputs
 http://www.openmusiclabs.com/learning/digital/pwm-dac/dual-pwm-circuits/index.html
 
