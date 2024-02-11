@@ -192,6 +192,7 @@ void setup() {
   ValueSetpoint = 0;
 
   windowStartTime = millis();
+  lastTime = millis()-settings.sampleTime;
 
   lcd.init();
   lcd.createChar(0, upArrow);
@@ -629,6 +630,7 @@ void setSSRInfoPin(long val0, long val1, long val2) {
 
 void enableRegulator(long val0, long val1, long val2) {
   pidEnabled = 1;
+  lastTime = millis()-settings.sampleTime;
 }
 
 void disableRegulator(long val0, long val1, long val2) {
