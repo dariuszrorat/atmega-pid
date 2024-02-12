@@ -124,7 +124,7 @@ byte switchOn[] = {
 
 byte powerOn[] = {
 	B00100,
-	B11111,
+	B01110,
 	B10101,
 	B10101,
 	B10101,
