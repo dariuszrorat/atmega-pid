@@ -122,6 +122,28 @@ byte switchOn[] = {
   B01010
 };
 
+byte powerOn[] = {
+	B00100,
+	B11111,
+	B10101,
+	B10101,
+	B10101,
+	B10001,
+	B10001,
+	B01110
+};
+
+byte bell[] = {
+  B00100,
+  B01110,
+  B01110,
+  B01110,
+  B11111,
+  B00000,
+  B00100,
+  B00000
+};
+
 byte lock = 0;
 byte blnk = 0;
 byte idle = 0;
@@ -199,6 +221,8 @@ void setup() {
   lcd.createChar(1, downArrow);
   lcd.createChar(2, switchOff);
   lcd.createChar(3, switchOn);
+  lcd.createChar(4, powerOn);
+  lcd.createChar(5, bell);
   lcd.backlight();
 
   Sch.init();
@@ -904,7 +928,7 @@ void pidCompute()
       }
 
       /*Remember some variables for next time*/
-      lastInput = Input;
+      lastInput = Input;      
       lastTime = now;
    }
 
@@ -1020,6 +1044,8 @@ void printValues() {
   printFilledStr(s, 1);
 
   if (pidEnabled == 1) {
+    printCustomChar(4, 15, 1);
+
     if (ValueInput > ValueLastInput) {
       printCustomChar(0, 15, 0);
     } else if (ValueInput < ValueLastInput) {
@@ -1035,13 +1061,10 @@ void printValues() {
       }
     }
 
-    lcd.setCursor(13, 1);
-    lcd.print("ON ");
+    if (Input > Setpoint)
+    {
+        printCustomChar(5, 10, 1);
+    }
 
-  }
-  else
-  {
-    lcd.setCursor(13, 1);
-    lcd.print("OFF");
   }
 }
