@@ -30,8 +30,8 @@ This directory contains simple MMI PID regulator for ATMEGA328/Arduino.
       *24*XX*Y#       set digital pin as 0 or 1
       *25*XXXX#       set desired analog input 0..1023
       *26*XX*YY#      set 16 bit mode dual PWM output pair, H = XX and L = YY
-      *31*XX*YY#      set the clip alarm LED pin XX to XX SP percent
-      *32*XX*YY#      set too low input value LED pin XX to XX SP percent
+      *31*XX*YY#      set the clip alarm LED pin XX to YY SP percent
+      *32*XX*YY#      set too low input value LED pin XX to YY SP percent
       *33*XX#         set SSR mode relay enable information LED pin
       *41*#           enable PID regulator
       *42*#           disable PID regulator
